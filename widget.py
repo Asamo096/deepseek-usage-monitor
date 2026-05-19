@@ -7,7 +7,7 @@ from typing import Any
 from itertools import cycle
 
 from api import DeepSeekPlatform
-from config import get_refresh_interval, get_hover_fade
+from config import get_refresh_interval, get_hover_fade, get_pin_window, get_currency, get_lite_mode, load_config, save_config
 
 # ── Colors ─────────────────────────────────────────────────────────────────
 BG      = "#0f0f1a"
@@ -34,6 +34,7 @@ PGDA    = "#ff6b6b"
 MB      = "#2a2a3e"
 
 W, H = 380, 350
+W_LITE, H_LITE = 310, 230
 SIDEBAR_WIDTH = 200  # 侧边栏宽度
 
 
@@ -133,17 +134,22 @@ class Widget:
         # Config
         self._interval = get_refresh_interval() * 1000
         self._hover_fade = get_hover_fade()
+        self._pin_window = get_pin_window()
+        self._currency = get_currency()
+        self._rate = 1.0
         self._fade_after_id = None
         self._dragging = False
         self._sidebar_visible = False
         self._animating = False
+        self._lite_mode = get_lite_mode()
 
         self.root = tk.Tk()
-        self.root.title("DeepSeek Monitor")
+        self.root.title("Tokens Monitor")
         self.root.overrideredirect(True)
-        self.root.attributes("-topmost", True, "-alpha", 0.96)
+        self.root.attributes("-topmost", self._pin_window, "-alpha", 0.96)
         self.root.configure(bg=BG)
-        self.root.geometry(f"{W}x{H}")
+        iw, ih = (W_LITE, H_LITE) if self._lite_mode else (W, H)
+        self.root.geometry(f"{iw}x{ih}")
 
         if self._hover_fade:
             self.root.bind("<Enter>", self._on_hover_in)
@@ -177,8 +183,89 @@ class Widget:
         self.root.bind("<Control-Tab>", lambda e: self.toggle_sidebar())
         self.root.bind("<Control-t>", lambda e: self.toggle_sidebar())
 
+        self._fetch_exchange_rate()
         self._draw_static()
         self._tick()
+
+    # ═══════════ CURRENCY HELPERS ═══════════
+
+    @property
+    def _currency_symbol(self):
+        return {"CNY": "¥", "USD": "$", "CAD": "$", "JPY": "¥"}.get(self._currency, "¥")
+
+    def _conv(self, amount):
+        """Convert amount from CNY to current currency."""
+        try:
+            return float(amount) * self._rate
+        except (ValueError, TypeError):
+            return 0.0
+
+    def _fmt_curr(self, amount, decimals=2):
+        """Format amount in current currency with symbol."""
+        try:
+            val = self._conv(amount)
+            return f"{self._currency_symbol}{val:.{decimals}f}"
+        except (ValueError, TypeError):
+            return f"{self._currency_symbol}--"
+
+    def _fetch_exchange_rate(self):
+        """Fetch live exchange rate from open.er-api.com (CNY base)."""
+        if self._currency == "CNY":
+            self._rate = 1.0
+            return
+        try:
+            import requests
+            resp = requests.get("https://open.er-api.com/v6/latest/CNY", timeout=10)
+            data = resp.json()
+            if data.get("result") == "success":
+                self._rate = data["rates"].get(self._currency, 1.0)
+        except Exception:
+            self._rate = 1.0
+
+    def toggle_pin(self) -> bool:
+        """Toggle always-on-top. Return new state."""
+        self._pin_window = not self._pin_window
+        self.root.after(0, lambda: self.root.attributes("-topmost", self._pin_window))
+        try:
+            cfg = load_config()
+            cfg["pin_window"] = self._pin_window
+            save_config(cfg)
+        except Exception:
+            pass
+        return self._pin_window
+
+    def get_pin_window(self) -> bool:
+        return self._pin_window
+
+    def get_lite_mode(self) -> bool:
+        return self._lite_mode
+
+    def get_currency_code(self) -> str:
+        return self._currency
+
+    def set_currency(self, code: str):
+        """Switch display currency, fetch rate, redraw."""
+        if code == self._currency:
+            return
+        self._currency = code
+        self._fetch_exchange_rate()
+        try:
+            cfg = load_config()
+            cfg["currency"] = self._currency
+            save_config(cfg)
+        except Exception:
+            pass
+        self.update_data()
+
+    def _restart(self):
+        """Restart the application."""
+        self.root.quit()
+        self.root.destroy()
+        import sys
+        import subprocess
+        import os
+        subprocess.Popen([sys.executable, os.path.abspath(sys.argv[0])])
+        os._exit(0)
 
     # ═══════════ LAYOUT ═══════════
     # Layout plan:
@@ -191,6 +278,9 @@ class Widget:
     #   292 month/status, 318 rotating quote, 336 refresh
 
     def _draw_static(self):
+        if self._lite_mode:
+            self._draw_static_lite()
+            return
         cv = self.cv
 
         # Outer pixel borders
@@ -198,9 +288,10 @@ class Widget:
         cv.create_rectangle(6, 6, W-6, H-6, outline=B2, width=1)
 
         # ── Title ──
-        cv.create_text(14, 22, text="DEEPSEEK MONITOR",
+        cv.create_text(14, 22, text="TOKENS MONITOR",
                        font=self.f1, fill=W0, anchor="w")
         cv.create_oval(W-28, 15, W-16, 27, fill=GREEN, outline="", tags="dot")
+        cv.create_text(W-36, 22, text="", font=self.f3, fill=B1, anchor="e", tags="fcur")
         self._hr(12, 44, W-12)
 
         # ── Balance card (46-150) ──
@@ -266,6 +357,44 @@ class Widget:
         cv.create_text(W//2, H-14, text="", font=self.f3,
                        fill=W2, anchor="center", tags="ft")
 
+    def _draw_static_lite(self):
+        cv = self.cv
+        w, h = W_LITE, H_LITE
+
+        # Outer pixel borders
+        cv.create_rectangle(2, 2, w-2, h-2, outline=B1, width=2)
+        cv.create_rectangle(6, 6, w-6, h-6, outline=B2, width=1)
+
+        # ── Title ──
+        cv.create_text(12, 16, text="TOKENS MONITOR", font=self.f2, fill=W0, anchor="w")
+        cv.create_oval(w-24, 11, w-14, 21, fill=GREEN, outline="", tags="dot")
+        cv.create_text(w-30, 16, text="", font=self.f3, fill=B1, anchor="e", tags="fcur")
+        for x in range(8, w-8, 8):
+            cv.create_rectangle(x, 28, x+5, 29, fill=B2, outline="")
+
+        # ── Balance card ──
+        cv.create_rectangle(8, 34, w-8, 106, fill=CARD, outline=BC, width=1)
+        cv.create_text(14, 38, text="BALANCE", font=self.f3, fill=W2, anchor="w")
+        cv.create_text(w//2, 68, text="", font=self.f5, fill=W0, anchor="center", tags="bal_amt")
+        cv.create_text(14, 88, text="", font=self.f3, fill=W1, anchor="w", tags="bal_sub")
+        cv.create_rectangle(14, 96, w-14, 104, fill=PGB, outline=BC, width=1, tags="pbg")
+
+        # ── Today card ──
+        cv.create_rectangle(8, 112, w-8, 168, fill=CARD, outline=BC, width=1)
+        cv.create_text(14, 116, text="TODAY", font=self.f3, fill=W2, anchor="w")
+        cv.create_text(14, 140, text="", font=self.f3, fill=W0, anchor="w", tags="tt_lite")
+        cv.create_text(w-14, 140, text="", font=self.f2, fill=BLUE, anchor="e", tags="ftc")
+        cv.create_text(14, 158, text="", font=self.f3, fill=GREEN, anchor="w", tags="cr_lite")
+
+        # ── Month line ──
+        cv.create_text(14, 178, text="MONTH", font=self.f3, fill=W2, anchor="w")
+        cv.create_text(14, 196, text="", font=self.f3, fill=W1, anchor="w", tags="fm_lite")
+
+        # ── Footer ──
+        for x in range(8, w-8, 8):
+            cv.create_rectangle(x, 210, x+5, 211, fill=B2, outline="")
+        cv.create_text(w//2, h-10, text="", font=self.f3, fill=W2, anchor="center", tags="ft")
+
     def _hr(self, x1, y, x2):
         for x in range(x1, x2, 8):
             self.cv.create_rectangle(x, y, x+4, y+2, fill=B2, outline="")
@@ -300,6 +429,15 @@ class Widget:
             return
 
         cv.itemconfig("dot", fill=GREEN if d.get("ok") else YELLOW)
+        cv.itemconfig("fcur", text=self._currency)
+
+        if self._lite_mode:
+            self._draw_lite(d)
+        else:
+            self._draw_normal(d)
+
+    def _draw_normal(self, d):
+        cv = self.cv
 
         # ── Balance card ──
         bal = float(d.get("balance", 0) or 0)
@@ -307,11 +445,11 @@ class Widget:
         tot = bal + mc
         pct = max(0, min(bal / tot, 1)) if tot else 1
 
-        cv.itemconfig("bal_amt", text=f"¥{_2(bal)}")
+        cv.itemconfig("bal_amt", text=self._fmt_curr(bal))
 
         bonus = float(d.get("bonus_balance", 0) or 0)
         cv.itemconfig("bal_sub",
-                      text=f"Wallet ¥{_2(bal)}  |  Free ¥{_2(bonus)}  |  Used {int((1-pct)*100)}%")
+                      text=f"Wallet {self._fmt_curr(bal)}  |  Free {self._fmt_curr(bonus)}  |  Used {int((1-pct)*100)}%")
 
         # progress bar fill
         pw = int(340 * pct)
@@ -363,7 +501,7 @@ class Widget:
             cv.itemconfig("cpct", text=f"{ch:,} / {ct:,}", fill=B1)
 
         # today cost (right of TOKENS row)
-        cv.create_text(W-18, 180, text=f"¥{_4(d.get('today_cost',0))}",
+        cv.create_text(W-18, 180, text=self._fmt_curr(d.get('today_cost',0), 4),
                        font=self.f2, fill=BLUE, anchor="e", tags=self._tg())
 
         # 侧边栏图表同步刷新
@@ -373,9 +511,51 @@ class Widget:
         # ── Footer ──
         mt = d.get("monthly_tokens", 0)
         cv.itemconfig("fm",
-                      text=f"MONTH  {mt:,} tkns  ¥{_4(d.get('monthly_cost',0))}")
+                      text=f"MONTH  {mt:,} tkns  {self._fmt_curr(d.get('monthly_cost',0), 4)}")
         cv.itemconfig("fs", text=f"LEFT {int(pct*100)}%")
         cv.itemconfig("fq", text=self._quote)
+        cv.itemconfig("ft", text=f"~ {datetime.now().strftime('%H:%M:%S')} ~")
+
+    def _draw_lite(self, d):
+        cv = self.cv
+        w = W_LITE
+
+        # ── Balance card ──
+        bal = float(d.get("balance", 0) or 0)
+        mc  = float(d.get("monthly_cost", 0) or 0)
+        tot = bal + mc
+        pct = max(0, min(bal / tot, 1)) if tot else 1
+        cv.itemconfig("bal_amt", text=self._fmt_curr(bal))
+        bonus = float(d.get("bonus_balance", 0) or 0)
+        cv.itemconfig("bal_sub",
+                      text=f"Wallet {self._fmt_curr(bal)}  |  Free {self._fmt_curr(bonus)}  |  Used {int((1-pct)*100)}%")
+        # progress bar
+        pw = int((w - 28) * pct)
+        if pw > 0:
+            bc = PGDA if pct < 0.15 else (PGCA if pct < 0.40 else PGFG)
+            for bx in range(14, 14+pw-2, 4):
+                bw = min(4, 14+pw-bx)
+                cv.create_rectangle(bx, 97, bx+bw, 103, fill=bc, outline="", tags=self._tg())
+        cv.create_text(w-16, 100, text=f"{int(pct*100)}%",
+                       font=self.f3, fill=W1 if pw <= 0 else B1, anchor="e", tags=self._tg())
+
+        # ── Today card ──
+        ttl = d.get("today_total", 0)
+        cv.itemconfig("tt_lite", text=f"TOKENS  {ttl:,}")
+        cv.itemconfig("ftc", text=self._fmt_curr(d.get("today_cost", 0), 4))
+        # cache hit rate
+        ch = d.get("today_cache_hit", 0)
+        cm = d.get("today_cache_miss", 0)
+        ct = ch + cm
+        crate = (ch / ct * 100) if ct else 0
+        cv.itemconfig("cr_lite", text=f"CACHE  {crate:.1f}%  {ch:,}/{ct:,}" if ct else "")
+
+        # ── Month line ──
+        mt = d.get("monthly_tokens", 0)
+        cv.itemconfig("fm_lite",
+                      text=f"{mt:,} tkns  {self._fmt_curr(d.get('monthly_cost',0), 4)}")
+
+        # ── Footer ──
         cv.itemconfig("ft", text=f"~ {datetime.now().strftime('%H:%M:%S')} ~")
 
     def _tick(self):
@@ -479,11 +659,31 @@ class Widget:
 
     def _pop(self, _):
         m = tk.Menu(self.root, tearoff=0, bg="#1a1a2e", fg=W0, font=self.f3)
-        m.add_command(label="Refresh Now", command=self.update_data)
+        m.add_command(label="🔍 Refresh Now", command=self.update_data)
         m.add_separator()
         m.add_command(label="📊 Toggle Charts", command=self.toggle_sidebar)
+        lite_label = "🔰 Lite Mode" if not self._lite_mode else "🔰 Full Mode"
+        m.add_command(label=lite_label, command=self.toggle_lite_mode)
         m.add_separator()
-        m.add_command(label="Exit", command=self._ex)
+
+        # Pin toggle
+        pin_label = "📌 Unpin Window" if self._pin_window else "📌 Pin Window"
+        m.add_command(label=pin_label, command=self.toggle_pin)
+        m.add_separator()
+
+        # Currency submenu
+        curr_menu = tk.Menu(m, tearoff=0, bg="#1a1a2e", fg=W0, font=self.f3)
+        currencies = [("CNY  ¥", "CNY"), ("USD  $", "USD"), ("CAD  $", "CAD"), ("JPY  ¥", "JPY")]
+        for label, code in currencies:
+            curr_menu.add_command(
+                label=f"{'✓ ' if self._currency == code else '   '}{label}",
+                command=lambda c=code: self.set_currency(c),
+            )
+        m.add_cascade(label="💱 Currency", menu=curr_menu)
+        m.add_separator()
+
+        m.add_command(label="🔄 Restart", command=self._restart)
+        m.add_command(label="✕ Exit", command=self._ex)
         try: m.tk_popup(self.root.winfo_pointerx(), self.root.winfo_pointery())
         finally: m.grab_release()
 
@@ -491,9 +691,29 @@ class Widget:
         self.root.quit()
         self.root.destroy()
 
+    def toggle_lite_mode(self):
+        """Toggle lite mode on/off. Redraws everything at new size."""
+        self._lite_mode = not self._lite_mode
+        try:
+            cfg = load_config()
+            cfg["lite_mode"] = self._lite_mode
+            save_config(cfg)
+        except Exception:
+            pass
+        # Force sidebar closed in lite mode
+        if self._lite_mode and self._sidebar_visible:
+            self._sidebar_visible = False
+            self.sidebar_cv.delete("all")
+        self.cv.delete("all")
+        self._dd.clear()
+        self._draw_static()
+        w, h = (W_LITE, H_LITE) if self._lite_mode else (W, H)
+        self.root.geometry(f"{w}x{h}")
+        self.update_data()
+
     def toggle_sidebar(self):
         """切换侧边栏显示/隐藏，带动画"""
-        if self._animating:
+        if self._animating or self._lite_mode:
             return
         self._hide_bar_tooltip()
         self._sidebar_visible = not self._sidebar_visible
@@ -660,7 +880,7 @@ class Widget:
         self.sidebar_cv.create_text(pad + 5, y0 + 5, text="◈", font=self.f3, fill=PGCA, anchor="w")
         self.sidebar_cv.create_text(pad + 17, y0 + 5, text="COST", font=self.f2, fill=PGCA, anchor="w")
         total_val = sum(d["cost"] for d in series)
-        self.sidebar_cv.create_text(pad + cw - 5, y0 + 5, text=f"¥{_4(total_val)}",
+        self.sidebar_cv.create_text(pad + cw - 5, y0 + 5, text=self._fmt_curr(total_val, 4),
                                     font=self.f2, fill=W0, anchor="e")
         for x in range(pad + 4, pad + cw - 2, 6):
             self.sidebar_cv.create_rectangle(x, y0 + 22, x + 3, y0 + 23, fill=B2, outline="")
@@ -673,7 +893,8 @@ class Widget:
         avg_val = total_val / n
         avg_y = by + bh - int(bh * avg_val / max_val)
         self.sidebar_cv.create_line(bx, avg_y, bx + bw, avg_y, fill=PGCA, width=1, dash=(3, 3))
-        self.sidebar_cv.create_text(bx + bw, avg_y - 2, text=f"avg ¥{avg_val:.4f}",
+        avg_label = f"avg {self._fmt_curr(avg_val, 4)}"
+        self.sidebar_cv.create_text(bx + bw, avg_y - 2, text=avg_label,
                                     font=("Courier New", 6), fill=PGCA, anchor="se")
 
         # ── 辅助网格线 ──
@@ -742,7 +963,7 @@ class Widget:
             f"  Cache Hit  {d['cache_hit']:>8,}",
             f"  Cache Miss {d['cache_miss']:>8,}",
             f"  {'─' * 16}  ",
-            f"  Cost       ¥{d['cost']:.4f}",
+            f"  Cost       {self._fmt_curr(d['cost'], 4):>8}",
         ]
         text = "\n".join(lines)
 

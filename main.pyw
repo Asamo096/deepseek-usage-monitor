@@ -74,7 +74,7 @@ def _create_tray_icon(widget: Widget) -> pystray.Icon:
     icon = pystray.Icon(
         "deepseek-monitor",
         img,
-        "DeepSeek Monitor",
+        "Tokens Monitor",
         pystray.Menu(
             pystray.MenuItem("Show / Hide", _schedule(lambda: _toggle_window(widget))),
             pystray.MenuItem("Refresh", _schedule(widget.update_data)),
@@ -85,11 +85,48 @@ def _create_tray_icon(widget: Widget) -> pystray.Icon:
                 checked=lambda item: widget.get_hover_fade(),
             ),
             pystray.MenuItem(
+                "Pin Window",
+                widget.toggle_pin,
+                checked=lambda item: widget.get_pin_window(),
+            ),
+            pystray.MenuItem(
                 "Charts Panel",
                 widget.toggle_sidebar,
                 checked=lambda item: widget.get_sidebar_visible(),
             ),
+            pystray.MenuItem(
+                "Lite Mode",
+                widget.toggle_lite_mode,
+                checked=lambda item: widget.get_lite_mode(),
+            ),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                "Currency",
+                pystray.Menu(
+                    pystray.MenuItem(
+                        "CNY  ¥",
+                        lambda: widget.set_currency("CNY"),
+                        checked=lambda item: widget.get_currency_code() == "CNY",
+                    ),
+                    pystray.MenuItem(
+                        "USD  $",
+                        lambda: widget.set_currency("USD"),
+                        checked=lambda item: widget.get_currency_code() == "USD",
+                    ),
+                    pystray.MenuItem(
+                        "CAD  C$",
+                        lambda: widget.set_currency("CAD"),
+                        checked=lambda item: widget.get_currency_code() == "CAD",
+                    ),
+                    pystray.MenuItem(
+                        "JPY  ¥",
+                        lambda: widget.set_currency("JPY"),
+                        checked=lambda item: widget.get_currency_code() == "JPY",
+                    ),
+                ),
+            ),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Restart", lambda: widget.root.after(0, widget._restart)),
             pystray.MenuItem("Exit", lambda: _do_exit(icon, widget)),
         ),
     )
