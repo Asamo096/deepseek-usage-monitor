@@ -126,7 +126,8 @@ class Widget:
         # Config
         self._interval = get_refresh_interval() * 1000
         self._hover_fade = get_hover_fade()
-        self._fade_job = None
+        self._fade_after_id = None
+        self._dragging = False
 
         self.root = tk.Tk()
         self.root.title("DeepSeek Monitor")
@@ -359,17 +360,19 @@ class Widget:
     # ═══════════ HOVER FADE ═══════════
 
     def _on_hover_in(self, _):
-        if self._hover_fade:
-            self._fade_to(0.25)
+        if self._dragging:
+            return
+        self._fade_to(0.25)
 
     def _on_hover_out(self, _):
-        if self._hover_fade:
-            self._fade_to(0.96)
+        if self._dragging:
+            return
+        self._fade_to(0.96)
 
     def _fade_to(self, target: float):
-        if self._fade_job:
-            self.root.after_cancel(self._fade_job)
-            self._fade_job = None
+        if self._fade_after_id is not None:
+            self.root.after_cancel(self._fade_after_id)
+            self._fade_after_id = None
 
         cur = float(self.root.attributes("-alpha"))
         if abs(cur - target) < 0.01:
@@ -385,9 +388,9 @@ class Widget:
             self.root.attributes("-alpha", max(0.05, min(a, 1.0)))
             if frame >= frames - 1:
                 self.root.attributes("-alpha", target)
-                self._fade_job = None
+                self._fade_after_id = None
                 return
-            self._fade_job = self.root.after(10, lambda: _step(frame + 1))
+            self._fade_after_id = self.root.after(10, lambda: _step(frame + 1))
 
         _step()
 
@@ -421,18 +424,30 @@ class Widget:
     def _ds(self, e):
         self._dx = e.x_root - self.root.winfo_x()
         self._dy = e.y_root - self.root.winfo_y()
-        if self._hover_fade:
-            if self._fade_job:
-                self.root.after_cancel(self._fade_job)
-                self._fade_job = None
-            self.root.attributes("-alpha", 0.96)
+        # Cancel fade, show full opacity during drag
+        if self._fade_after_id is not None:
+            self.root.after_cancel(self._fade_after_id)
+            self._fade_after_id = None
+        self.root.attributes("-alpha", 0.96)
+        self._dragging = True
 
     def _dm(self, e):
         self.root.geometry(f"+{e.x_root-self._dx}+{e.y_root-self._dy}")
 
     def _de(self, _):
-        if self._hover_fade:
-            self._fade_to(0.25)
+        self._dragging = False
+        # Determine correct fade state based on mouse position after drag
+        try:
+            mx = self.root.winfo_pointerx()
+            my = self.root.winfo_pointery()
+            wx = self.root.winfo_rootx()
+            wy = self.root.winfo_rooty()
+            ww = self.root.winfo_width()
+            wh = self.root.winfo_height()
+            if self._hover_fade and wx <= mx <= wx + ww and wy <= my <= wy + wh:
+                self._on_hover_in(None)
+        except Exception:
+            pass
 
     def _pop(self, _):
         m = tk.Menu(self.root, tearoff=0, bg="#1a1a2e", fg=W0, font=self.f3)
