@@ -8,7 +8,7 @@ from itertools import cycle
 import threading
 
 from api import DeepSeekPlatform
-from config import get_refresh_interval, get_hover_fade, get_pin_window, get_currency, get_lite_mode, get_theme, get_auto_snap, load_config, save_config
+from config import get_refresh_interval, get_pin_window, get_currency, get_lite_mode, get_theme, get_auto_snap, load_config, save_config
 
 # ── Colors ─────────────────────────────────────────────────────────────────
 # Module-level color names — updated by apply_theme() at runtime.
@@ -34,6 +34,10 @@ PGCA    = "#e0af68"
 PGDA    = "#ff6b6b"
 
 MB      = "#2a2a3e"
+MENU_BG = "#19192e"
+MENU_FG = "#f0f0ff"
+MENU_ABG = "#7dcfff"
+MENU_AFG = "#0f0f1a"
 
 THEMES = {
     "Default": {
@@ -44,6 +48,7 @@ THEMES = {
         "YELLOW": "#e0af68", "ORANGE": "#ff9e64", "PURPLE": "#bb9af7",
         "PGB": "#2a2a3e", "PGFG": "#7aa2f7", "PGCA": "#e0af68", "PGDA": "#ff6b6b",
         "MB": "#2a2a3e",
+        "MENU_BG": "#19192e", "MENU_FG": "#f0f0ff", "MENU_ABG": "#7dcfff", "MENU_AFG": "#0f0f1a",
     },
     "Amber Glow": {
         "BG": "#1a0a05", "CARD": "#2a1410",
@@ -53,6 +58,7 @@ THEMES = {
         "YELLOW": "#f0b060", "ORANGE": "#e06030", "PURPLE": "#c04080",
         "PGB": "#3a2018", "PGFG": "#ff8c42", "PGCA": "#e0a060", "PGDA": "#e05040",
         "MB": "#3a2018",
+        "MENU_BG": "#2a1410", "MENU_FG": "#fff0e8", "MENU_ABG": "#ff8c42", "MENU_AFG": "#1a0a05",
     },
     "Frost Blue": {
         "BG": "#0a0f1a", "CARD": "#141e2e",
@@ -62,6 +68,7 @@ THEMES = {
         "YELLOW": "#d4b060", "ORANGE": "#c08050", "PURPLE": "#8890d0",
         "PGB": "#1a2540", "PGFG": "#5ba0d0", "PGCA": "#88c0e8", "PGDA": "#e06060",
         "MB": "#1a2540",
+        "MENU_BG": "#141e2e", "MENU_FG": "#e8f0ff", "MENU_ABG": "#5ba0d0", "MENU_AFG": "#0a0f1a",
     },
     "Verdant Green": {
         "BG": "#0a120a", "CARD": "#142214",
@@ -71,6 +78,7 @@ THEMES = {
         "YELLOW": "#c0c060", "ORANGE": "#c08040", "PURPLE": "#80a080",
         "PGB": "#1e301e", "PGFG": "#6ab86a", "PGCA": "#b0b040", "PGDA": "#d06050",
         "MB": "#1e301e",
+        "MENU_BG": "#142214", "MENU_FG": "#e8f0e8", "MENU_ABG": "#6ab86a", "MENU_AFG": "#0a120a",
     },
     "Soft Pastel": {
         "BG": "#f2ecee", "CARD": "#ffffff",
@@ -80,6 +88,7 @@ THEMES = {
         "YELLOW": "#d4a060", "ORANGE": "#e08050", "PURPLE": "#b080c0",
         "PGB": "#e8e0e4", "PGFG": "#55cdfc", "PGCA": "#f7a8b8", "PGDA": "#e06070",
         "MB": "#e8e0e4",
+        "MENU_BG": "#ffffff", "MENU_FG": "#1a1020", "MENU_ABG": "#55cdfc", "MENU_AFG": "#ffffff",
     },
     "Midnight Glow": {
         "BG": "#0a0a0a", "CARD": "#1a1a1a",
@@ -89,6 +98,7 @@ THEMES = {
         "YELLOW": "#ffbb40", "ORANGE": "#ff8800", "PURPLE": "#b07040",
         "PGB": "#1a1a1a", "PGFG": "#ffa500", "PGCA": "#ffbb40", "PGDA": "#e05050",
         "MB": "#1a1a1a",
+        "MENU_BG": "#1a1a1a", "MENU_FG": "#f0f0f0", "MENU_ABG": "#ffa500", "MENU_AFG": "#0a0a0a",
     },
 }
 
@@ -242,13 +252,11 @@ class Widget:
 
         # Config
         self._interval = get_refresh_interval() * 1000
-        self._hover_fade = get_hover_fade()
         self._pin_window = get_pin_window()
         self._currency = get_currency()
         self._rate = 1.0
-        self._fade_after_id = None
         self._dragging = False
-        self._sidebar_visible = False
+        self._sidebar_visible = True
         self._animating = False
         self._lite_mode = get_lite_mode()
         self._theme = get_theme()
@@ -256,16 +264,10 @@ class Widget:
         self.root = tk.Tk()
         self.root.title("Tokens Monitor")
         self.root.overrideredirect(True)
-        self.root.attributes("-topmost", self._pin_window, "-alpha", 0.96)
+        self.root.attributes("-topmost", self._pin_window, "-alpha", 0.0)
         self.root.configure(bg=BG)
         iw, ih = (W_LITE, H_LITE) if self._lite_mode else (W, H)
         self.root.geometry(f"{iw}x{ih}")
-
-        # Always bind hover fade handlers (they check self._hover_fade internally)
-        self.root.bind("<Enter>", self._on_hover_in)
-        self.root.bind("<Leave>", self._on_hover_out)
-        if not self._hover_fade:
-            self.root.attributes("-alpha", 0.96)
 
         self.f1 = tkfont.Font(family="Courier New", size=13, weight="bold")
         self.f2 = tkfont.Font(family="Courier New", size=11, weight="bold")
@@ -296,7 +298,14 @@ class Widget:
         self._peek_timer_id = None
         self._snap_glow_items: list[str] = []
         self._snap_click_unsnap = False  # True if _ds just unsnapped (prevent re-snap on click)
+        self._snap_click_pos = None      # 记录 unsnap 时的窗口位置，用于判断是否移动过
         self._snap_animating = False     # True during snap/peek animation (suppress Leave events)
+
+        self._tooltip_after_id = None  # 延迟隐藏定时器
+        self._tooltip_fade_id = None   # 淡入淡出动画定时器
+        self._last_bar_index = -1      # 当前悬停的柱子索引
+        self._menu_closed = False      # 右键菜单关闭后短暂阻止吸附
+        self._startup_done = False     # 首次数据加载后淡入
 
         # 拖拽事件：绑定到两个 canvas（root 不绑，避免重复触发）
         for widget in (self.cv, self.sidebar_cv):
@@ -304,7 +313,7 @@ class Widget:
             widget.bind("<B1-Motion>", self._dm)
             widget.bind("<ButtonRelease-1>", self._de)
             widget.bind("<Button-3>", self._pop)
-        self.root.bind("<Button-3>", self._pop)  # 任意位置右键菜单（已有，加在 sidebar 上方的安全网）
+        self.sidebar_cv.bind("<Leave>", lambda e: self._on_sidebar_leave())
         # 键盘快捷键：Ctrl+Tab 或 Ctrl+T 切换侧边栏
         self.root.bind("<Control-Tab>", lambda e: self.toggle_sidebar())
         self.root.bind("<Control-t>", lambda e: self.toggle_sidebar())
@@ -316,7 +325,12 @@ class Widget:
         self._fetch_exchange_rate()
         self._apply_theme(self._theme)
         self._draw_static()
+        if self._sidebar_visible:
+            self.sidebar_cv.config(width=SIDEBAR_WIDTH)
+            self.root.geometry(f"{W + SIDEBAR_WIDTH}x{H}")
+            # 暂不绘制图表——数据到达后再画，配合淡入
         self._tick()
+        self.root.after(5000, self._startup_fallback)
 
     # ═══════════ CURRENCY HELPERS ═══════════
 
@@ -382,18 +396,76 @@ class Widget:
         self.sidebar_cv.configure(bg=CARD)
 
     def apply_theme(self, name: str):
-        """Public: apply theme, persist, redraw."""
-        self._apply_theme(name)
-        try:
-            cfg = load_config()
-            cfg["theme"] = self._theme
-            save_config(cfg)
-        except Exception:
-            pass
-        self.cv.delete("all")
-        self._dd.clear()
-        self._draw_static()
-        self.update_data()
+        """Public: apply theme with crossfade, persist, redraw."""
+        if name == self._theme:
+            return
+        self._crossfade_to_theme(name)
+
+    def _crossfade_to_theme(self, name):
+        """窗口淡出 → 切换主题重绘 → 淡入"""
+        target = float(self.root.attributes("-alpha"))
+        steps = 6
+        saved_data = self._data  # 保存旧数据用于过渡预览
+
+        def _apply():
+            self._apply_theme(name)
+            try:
+                cfg = load_config()
+                cfg["theme"] = self._theme
+                save_config(cfg)
+            except Exception:
+                pass
+            self.cv.delete("all")
+            self._dd.clear()
+            self._draw_static()
+            # 用旧数据 + 新颜色立即渲染，避免过渡期间空白闪烁
+            if saved_data:
+                self._data = saved_data
+                self._draw()
+                if self._sidebar_visible:
+                    self._draw_charts()
+            # 后台刷新真实数据
+            self.update_data()
+            self.root.after(15, _fade_in)
+
+        def _fade_out(i=0):
+            p = (i + 1) / steps
+            self.root.attributes("-alpha", target * (1 - p) + 0.05 * p)
+            if i + 1 < steps:
+                self.root.after(20, lambda: _fade_out(i + 1))
+            else:
+                _apply()
+
+        def _fade_in(i=0):
+            p = (i + 1) / steps
+            self.root.attributes("-alpha", 0.05 * (1 - p) + target * p)
+            if i + 1 < steps:
+                self.root.after(20, lambda: _fade_in(i + 1))
+
+        _fade_out()
+
+    # ═══════════ STARTUP FADE-IN ═══════════
+
+    def _startup_fade_in(self):
+        """首次数据加载后淡入窗口 — 从透明平滑渐显"""
+        if self._startup_done:
+            return
+        self._startup_done = True
+        target = 0.96
+        steps = 8
+
+        def _fade(i=0):
+            p = (i + 1) / steps
+            self.root.attributes("-alpha", target * p)
+            if i + 1 < steps:
+                self.root.after(20, lambda: _fade(i + 1))
+
+        _fade()
+
+    def _startup_fallback(self):
+        """启动后 5 秒数据仍未到则强制显示（避免网络慢时一直空白）"""
+        if not self._startup_done:
+            self._startup_fade_in()
 
     def get_lite_mode(self) -> bool:
         return self._lite_mode
@@ -596,7 +668,11 @@ class Widget:
         self._data = data
         self._quote = next(QUOTES)
         self._draw()
+        if self._sidebar_visible:
+            self._draw_charts()
         self._updating = False
+        if not self._startup_done:
+            self._startup_fade_in()
 
     def _on_fetch_error(self, msg):
         if self._data is None:
@@ -604,7 +680,11 @@ class Widget:
         self._data["error"] = msg
         self._data["ok"] = False
         self._draw()
+        if self._sidebar_visible:
+            self._draw_charts()
         self._updating = False
+        if not self._startup_done:
+            self._startup_fade_in()
 
     def _draw(self):
         # When snapped and not peeking, skip drawing — strip has no data items
@@ -772,6 +852,8 @@ class Widget:
             edge = "right"
         elif ry < self.SNAP_THRESHOLD:
             edge = "top"
+        elif ry + rh > sh - self.SNAP_THRESHOLD:
+            edge = "bottom"
 
         if edge:
             self._snap_to_edge(edge)
@@ -799,14 +881,20 @@ class Widget:
         rw = self.root.winfo_width()
         rh = self.root.winfo_height()
         sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
 
-        self._snap_restore = dict(x=rx, y=ry, w=rw, h=rh, sidebar=self._sidebar_visible)
+        # 夹紧 restore 位置到屏幕内，保证展开时窗口完全可见
+        restore_x = max(0, min(rx, sw - rw))
+        restore_y = max(0, min(ry, sh - rh))
+        self._snap_restore = dict(x=restore_x, y=restore_y, w=rw, h=rh, sidebar=self._sidebar_visible)
 
         strip_w = self.SNAP_STRIP
         if edge == "left":
             new_x, new_y, new_w, new_h = 0, ry, strip_w, rh
         elif edge == "right":
             new_x, new_y, new_w, new_h = sw - strip_w, ry, strip_w, rh
+        elif edge == "bottom":
+            new_x, new_y, new_w, new_h = rx, sh - strip_w, rw, strip_w
         else:
             new_x, new_y, new_w, new_h = rx, 0, rw, strip_w
 
@@ -935,6 +1023,7 @@ class Widget:
         _anim()
 
     def _end_peek(self):
+        self._peeking = False  # 允许鼠标重新进入时重新触发 peek
         if self._snap_after_id:
             self.root.after_cancel(self._snap_after_id)
         self._snap_after_id = self.root.after(1500, self._re_snap)
@@ -951,12 +1040,15 @@ class Widget:
         ry, rh = self._snap_restore["y"], self._snap_restore["h"]
         rx, rw = self._snap_restore["x"], self._snap_restore["w"]
         sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
 
         strip_w = self.SNAP_STRIP
         if edge == "left":
             new_x, new_y, new_w, new_h = 0, ry, strip_w, rh
         elif edge == "right":
             new_x, new_y, new_w, new_h = sw - strip_w, ry, strip_w, rh
+        elif edge == "bottom":
+            new_x, new_y, new_w, new_h = rx, sh - strip_w, rw, strip_w
         else:
             new_x, new_y, new_w, new_h = rx, 0, rw, strip_w
 
@@ -1036,60 +1128,6 @@ class Widget:
         self.update_data()
         self.root.after(self._interval, self._tick)
 
-    # ═══════════ HOVER FADE ═══════════
-
-    def _on_hover_in(self, _):
-        if self._dragging or self._snapped or not self._hover_fade:
-            return
-        self._fade_to(0.25)
-
-    def _on_hover_out(self, _):
-        if self._dragging or self._snapped or not self._hover_fade:
-            return
-        self._fade_to(0.96)
-
-    def _fade_to(self, target: float):
-        if self._fade_after_id is not None:
-            self.root.after_cancel(self._fade_after_id)
-            self._fade_after_id = None
-
-        cur = float(self.root.attributes("-alpha"))
-        if abs(cur - target) < 0.01:
-            return
-
-        step = 0.025 if target > cur else -0.025
-        frames = int(abs(target - cur) / 0.025)
-        if frames < 1:
-            frames = 1
-
-        def _step(frame=0):
-            a = cur + step * (frame + 1)
-            self.root.attributes("-alpha", max(0.05, min(a, 1.0)))
-            if frame >= frames - 1:
-                self.root.attributes("-alpha", target)
-                self._fade_after_id = None
-                return
-            self._fade_after_id = self.root.after(10, lambda: _step(frame + 1))
-
-        _step()
-
-    def toggle_hover_fade(self) -> bool:
-        """Toggle hover-fade on/off."""
-        self._hover_fade = not self._hover_fade
-        try:
-            from config import load_config, save_config
-            cfg = load_config()
-            cfg["hover_fade"] = self._hover_fade
-            save_config(cfg)
-        except Exception:
-            pass
-        if not self._hover_fade:
-            self.root.after(0, lambda: self.root.attributes("-alpha", 0.96))
-        return self._hover_fade
-
-    def get_hover_fade(self) -> bool:
-        return self._hover_fade
-
     def get_sidebar_visible(self) -> bool:
         return self._sidebar_visible
 
@@ -1105,14 +1143,10 @@ class Widget:
             saved = self._snap_restore
             self._unsnap()
             self._snap_click_unsnap = True
+            self._snap_click_pos = (saved["x"], saved["y"])
             # Use SAVED geometry (not winfo_x/y which is still the old strip position)
             self._dx = e.x_root - saved["x"]
             self._dy = e.y_root - saved["y"]
-        # Cancel fade, show full opacity during drag
-        if self._fade_after_id is not None:
-            self.root.after_cancel(self._fade_after_id)
-            self._fade_after_id = None
-        self.root.attributes("-alpha", 0.96)
         self._dragging = True
 
     def _dm(self, e):
@@ -1120,94 +1154,137 @@ class Widget:
 
     def _de(self, _):
         self._dragging = False
-        if self._auto_snap and not self._snap_click_unsnap:
-            self._check_snap()
+        # 右键菜单刚关闭时不触发吸附，避免点按菜单外的误操作
+        if self._menu_closed:
+            self._menu_closed = False
+            self._snap_click_unsnap = False
+            self._snap_click_pos = None
+            return
+        if self._auto_snap:
+            # 从 snap 拖出后：仅当窗口位置没动过（还原点附近）才跳过吸附
+            if self._snap_click_unsnap and self._snap_click_pos:
+                rx = self.root.winfo_rootx()
+                ry = self.root.winfo_rooty()
+                cx, cy = self._snap_click_pos
+                if abs(rx - cx) > 10 or abs(ry - cy) > 10:
+                    self._check_snap()
+            else:
+                self._check_snap()
         self._snap_click_unsnap = False
-        # Determine correct fade state based on mouse position after drag
-        try:
-            mx = self.root.winfo_pointerx()
-            my = self.root.winfo_pointery()
-            wx = self.root.winfo_rootx()
-            wy = self.root.winfo_rooty()
-            ww = self.root.winfo_width()
-            wh = self.root.winfo_height()
-            if self._hover_fade and wx <= mx <= wx + ww and wy <= my <= wy + wh:
-                self._on_hover_in(None)
-        except Exception:
-            pass
+        self._snap_click_pos = None
 
     def _pop(self, _):
+        # 取消待处理的重吸附定时器（倒计时期间点击右键）
+        if self._snap_after_id:
+            self.root.after_cancel(self._snap_after_id)
+            self._snap_after_id = None
+        if self._peek_timer_id:
+            self.root.after_cancel(self._peek_timer_id)
+            self._peek_timer_id = None
         # Unsnap if right-clicking while snapped
         if self._snapped and not self._peeking:
             self._start_peek()
-        m = tk.Menu(self.root, tearoff=0, bg="#1a1a2e", fg="#f0f0ff", font=self.f3)
-        m.add_command(label="🔍 Refresh Now", command=self.update_data)
+
+        m = tk.Menu(self.root, tearoff=0, bg=MENU_BG, fg=MENU_FG,
+                    activebackground=MENU_ABG, activeforeground=MENU_AFG, font=self.f3)
+
+        # 直接执行命令，再关闭菜单（Windows 上 tk_popup 非阻塞，延迟执行不可靠）
+        def _pick(fn, *a):
+            def _cmd():
+                try:
+                    fn(*a)
+                finally:
+                    self._menu_closed = True
+                    self.root.after(300, lambda: setattr(self, '_menu_closed', False))
+                    try: m.unpost()
+                    except: pass
+                    self.root.after_idle(m.destroy)
+            return _cmd
+
+        m.add_command(label="🔍 Refresh Now", command=_pick(self.update_data))
         m.add_separator()
-        m.add_command(label="📊 Toggle Charts", command=self.toggle_sidebar)
+        m.add_command(label="📊 Toggle Charts", command=_pick(self.toggle_sidebar))
         lite_label = "🔰 Lite Mode" if not self._lite_mode else "🔰 Full Mode"
-        m.add_command(label=lite_label, command=self.toggle_lite_mode)
+        m.add_command(label=lite_label, command=_pick(self.toggle_lite_mode))
         m.add_separator()
 
-        # Pin toggle
         pin_label = "📌 Unpin Window" if self._pin_window else "📌 Pin Window"
-        m.add_command(label=pin_label, command=self.toggle_pin)
-        # Auto-snap toggle
+        m.add_command(label=pin_label, command=_pick(self.toggle_pin))
         snap_label = "🧲 Unsnap (Beta)" if self._auto_snap else "🧲 Auto Snap (Beta)"
-        m.add_command(label=snap_label, command=self.toggle_auto_snap)
+        m.add_command(label=snap_label, command=_pick(self.toggle_auto_snap))
         m.add_separator()
 
         # Currency submenu
-        curr_menu = tk.Menu(m, tearoff=0, bg="#1a1a2e", fg="#f0f0ff", font=self.f3)
-        currencies = [("CNY  ¥", "CNY"), ("USD  $", "USD"), ("CAD  $", "CAD"), ("JPY  ¥", "JPY")]
-        for label, code in currencies:
+        curr_menu = tk.Menu(m, tearoff=0, bg=MENU_BG, fg=MENU_FG,
+                            activebackground=MENU_ABG, activeforeground=MENU_AFG, font=self.f3)
+        for label, code in [("CNY  ¥", "CNY"), ("USD  $", "USD"), ("CAD  $", "CAD"), ("JPY  ¥", "JPY")]:
             curr_menu.add_command(
                 label=f"{'✓ ' if self._currency == code else '   '}{label}",
-                command=lambda c=code: self.set_currency(c),
+                command=_pick(self.set_currency, code),
             )
         m.add_cascade(label="💱 Currency", menu=curr_menu)
         m.add_separator()
 
         # Theme submenu
-        theme_menu = tk.Menu(m, tearoff=0, bg="#1a1a2e", fg="#f0f0ff", font=self.f3)
+        theme_menu = tk.Menu(m, tearoff=0, bg=MENU_BG, fg=MENU_FG,
+                             activebackground=MENU_ABG, activeforeground=MENU_AFG, font=self.f3)
         for t_name in THEMES:
             theme_menu.add_command(
                 label=f"{'✓ ' if self._theme == t_name else '   '}{t_name}",
-                command=lambda n=t_name: self.apply_theme(n),
+                command=_pick(self.apply_theme, t_name),
             )
         m.add_cascade(label="🎨 Theme", menu=theme_menu)
         m.add_separator()
 
-        m.add_command(label="🔄 Restart", command=self._restart)
-        m.add_command(label="✕ Exit", command=self._ex)
-        try: m.tk_popup(self.root.winfo_pointerx(), self.root.winfo_pointery())
-        finally: m.grab_release()
+        m.add_command(label="🔄 Restart", command=_pick(self._restart))
+        m.add_command(label="✕ Exit", command=_pick(self._ex))
+        m.tk_popup(self.root.winfo_pointerx(), self.root.winfo_pointery())
+        m.grab_release()
 
     def _ex(self):
         self.root.quit()
         self.root.destroy()
 
     def toggle_lite_mode(self):
-        """Toggle lite mode on/off. Redraws everything at new size."""
-        # Unsnap if currently snapped
+        """Toggle lite mode on/off with smooth crossfade."""
         if self._snapped:
             self._unsnap()
-        self._lite_mode = not self._lite_mode
-        try:
-            cfg = load_config()
-            cfg["lite_mode"] = self._lite_mode
-            save_config(cfg)
-        except Exception:
-            pass
-        # Force sidebar closed in lite mode
-        if self._lite_mode and self._sidebar_visible:
-            self._sidebar_visible = False
-            self.sidebar_cv.delete("all")
-        self.cv.delete("all")
-        self._dd.clear()
-        self._draw_static()
-        w, h = (W_LITE, H_LITE) if self._lite_mode else (W, H)
-        self.root.geometry(f"{w}x{h}")
-        self.update_data()
+        target_alpha = float(self.root.attributes("-alpha"))
+
+        def _apply():
+            self._lite_mode = not self._lite_mode
+            try:
+                cfg = load_config()
+                cfg["lite_mode"] = self._lite_mode
+                save_config(cfg)
+            except Exception:
+                pass
+            if self._lite_mode and self._sidebar_visible:
+                self._sidebar_visible = False
+                self.sidebar_cv.delete("all")
+            self.cv.delete("all")
+            self._dd.clear()
+            self._draw_static()
+            w, h = (W_LITE, H_LITE) if self._lite_mode else (W, H)
+            self.root.geometry(f"{w}x{h}")
+            self.update_data()
+            self.root.after(15, _fade_in)
+
+        def _fade_out(i=0):
+            p = (i + 1) / 6
+            self.root.attributes("-alpha", target_alpha * (1 - p) + 0.05 * p)
+            if i + 1 < 6:
+                self.root.after(20, lambda: _fade_out(i + 1))
+            else:
+                _apply()
+
+        def _fade_in(i=0):
+            p = (i + 1) / 6
+            self.root.attributes("-alpha", 0.05 * (1 - p) + target_alpha * p)
+            if i + 1 < 6:
+                self.root.after(20, lambda: _fade_in(i + 1))
+
+        _fade_out()
 
     def toggle_sidebar(self):
         """切换侧边栏显示/隐藏，带动画"""
@@ -1248,6 +1325,7 @@ class Widget:
 
     def _draw_charts(self):
         """绘制侧边栏：月度趋势图，赛博像素风格"""
+        self._hide_bar_tooltip()  # 重绘前清理残留 tooltip
         self.sidebar_cv.delete("all")
         d = self._data
         if not d:
@@ -1342,9 +1420,11 @@ class Widget:
                                              fill="#8aacff", outline="", tags=tag)
 
             self.sidebar_cv.tag_bind(tag, "<Enter>",
-                lambda e, d=day: self._show_bar_tooltip(e, d))
+                lambda e, idx=i, d=day: self._show_bar_tooltip(e, idx, d))
+            self.sidebar_cv.tag_bind(tag, "<Motion>",
+                lambda e: self._move_bar_tooltip(e))
             self.sidebar_cv.tag_bind(tag, "<Leave>",
-                lambda e: self._hide_bar_tooltip())
+                lambda e: self._schedule_hide_tooltip())
 
             # 日期标签
             n_days = len(series)
@@ -1419,9 +1499,11 @@ class Widget:
                                              fill="#c8a860", outline="", tags=tag)
 
             self.sidebar_cv.tag_bind(tag, "<Enter>",
-                lambda e, d=day: self._show_bar_tooltip(e, d))
+                lambda e, idx=i, d=day: self._show_bar_tooltip(e, idx, d))
+            self.sidebar_cv.tag_bind(tag, "<Motion>",
+                lambda e: self._move_bar_tooltip(e))
             self.sidebar_cv.tag_bind(tag, "<Leave>",
-                lambda e: self._hide_bar_tooltip())
+                lambda e: self._schedule_hide_tooltip())
 
             # 日期标签
             n_days = len(series)
@@ -1433,9 +1515,26 @@ class Widget:
 
     # ═══════════ BAR TOOLTIP ═══════════
 
-    def _show_bar_tooltip(self, event, day):
-        """鼠标悬停柱子时弹出详细信息浮窗"""
-        self._hide_bar_tooltip()
+    def _move_bar_tooltip(self, event):
+        """跟随鼠标移动 tooltip 位置"""
+        tt = getattr(self, "_tooltip", None)
+        if tt:
+            try:
+                tt.geometry(f"+{event.x_root + 14}+{event.y_root + 10}")
+            except tk.TclError:
+                pass
+
+    def _show_bar_tooltip(self, event, idx, day):
+        """鼠标悬停柱子时弹出详细信息浮窗（淡入）"""
+        # 取消所有待处理的隐藏/淡出
+        if self._tooltip_after_id:
+            self.root.after_cancel(self._tooltip_after_id)
+            self._tooltip_after_id = None
+        if self._tooltip_fade_id:
+            self.root.after_cancel(self._tooltip_fade_id)
+            self._tooltip_fade_id = None
+        self._last_bar_index = idx
+        self._hide_bar_tooltip()  # 立即销毁旧 tooltip
         d = day
         is_today = d["date"] == date.today().isoformat()
         accent = PGCA if is_today else BLUE
@@ -1472,17 +1571,76 @@ class Widget:
         x = event.x_root + 14
         y = event.y_root + 10
         tt.geometry(f"+{x}+{y}")
+        tt.attributes("-alpha", 0.0)    # 初始透明
         self._tooltip = tt
+        self._fade_tooltip(0.0, 1.0, 5, 15)  # 淡入
 
     def _hide_bar_tooltip(self):
-        """隐藏 tooltip 浮窗"""
+        """隐藏 tooltip 浮窗（立即销毁，无动画）"""
+        if self._tooltip_after_id:
+            self.root.after_cancel(self._tooltip_after_id)
+            self._tooltip_after_id = None
+        if self._tooltip_fade_id:
+            self.root.after_cancel(self._tooltip_fade_id)
+            self._tooltip_fade_id = None
+        self._last_bar_index = -1
         tt = getattr(self, "_tooltip", None)
         if tt:
-            try:
-                tt.destroy()
-            except tk.TclError:
-                pass
+            try: tt.destroy()
+            except tk.TclError: pass
             self._tooltip = None
+
+    def _schedule_hide_tooltip(self):
+        """延迟淡出 tooltip，快速掠过相邻柱子时被 enter 取消"""
+        if self._tooltip_after_id:
+            self.root.after_cancel(self._tooltip_after_id)
+        self._tooltip_after_id = self.root.after(80, self._start_fade_out)
+
+    def _start_fade_out(self):
+        """淡出 tooltip（由 schedule 触发，完成后再销毁）"""
+        self._tooltip_after_id = None
+        if self._tooltip_fade_id:
+            self.root.after_cancel(self._tooltip_fade_id)
+            self._tooltip_fade_id = None
+        tt = getattr(self, "_tooltip", None)
+        if not tt:
+            return
+        try:
+            cur = float(tt.attributes("-alpha"))
+        except (tk.TclError, ValueError):
+            cur = 1.0
+        self._fade_tooltip(cur, 0.0, 4, 15, on_done=self._hide_bar_tooltip)
+
+    def _fade_tooltip(self, start, end, steps, interval, on_done=None):
+        """逐帧调整 tooltip 透明度"""
+        tt = getattr(self, "_tooltip", None)
+        if not tt:
+            if on_done: on_done()
+            return
+        delta = (end - start) / steps
+
+        def _step(i=0):
+            tt = getattr(self, "_tooltip", None)
+            if not tt:
+                self._tooltip_fade_id = None
+                if on_done: on_done()
+                return
+            try:
+                tt.attributes("-alpha", start + delta * (i + 1))
+            except tk.TclError:
+                self._tooltip_fade_id = None
+                return
+            if i + 1 < steps:
+                self._tooltip_fade_id = self.root.after(interval, lambda: _step(i + 1))
+            else:
+                self._tooltip_fade_id = None
+                if on_done: on_done()
+
+        _step()
+
+    def _on_sidebar_leave(self):
+        """鼠标离开侧边栏 → 立即强制隐藏 tooltip"""
+        self._hide_bar_tooltip()
 
     # ═══════════ RUN ═══════════
 

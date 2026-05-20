@@ -78,12 +78,6 @@ def _create_tray_icon(widget: Widget) -> pystray.Icon:
         pystray.Menu(
             pystray.MenuItem("Show / Hide", _schedule(lambda: _toggle_window(widget))),
             pystray.MenuItem("Refresh", _schedule(widget.update_data)),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem(
-                "Hover Fade",
-                widget.toggle_hover_fade,
-                checked=lambda item: widget.get_hover_fade(),
-            ),
             pystray.MenuItem(
                 "Pin Window",
                 widget.toggle_pin,

@@ -78,12 +78,6 @@ def get_refresh_interval() -> int:
         return 10
 
 
-def get_hover_fade() -> bool:
-    """Return whether hover-fade is enabled (default true)."""
-    cfg = load_config()
-    return bool(cfg.get("hover_fade", True))
-
-
 def get_pin_window() -> bool:
     """Return whether window is always-on-top (default true)."""
     cfg = load_config()
