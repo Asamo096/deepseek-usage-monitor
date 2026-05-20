@@ -1386,7 +1386,9 @@ class Widget:
             self.sidebar_cv.create_rectangle(x, y0 + 22, x + 3, y0 + 23, fill=B2, outline="")
 
         # ── 计算柱子参数 ──
-        max_val = max(d["total"] for d in series) or 1
+        actual_max = max(d["total"] for d in series) or 1
+        chart_max_cfg = load_config().get("chart_max_display", {}).get("token")
+        max_val = chart_max_cfg if (chart_max_cfg and chart_max_cfg > 0) else actual_max
         n = len(series)
         gap = max(2, bw // 55)
         bar_w = max(3, (bw - gap * (n - 1)) / n)
@@ -1401,7 +1403,7 @@ class Widget:
 
         # ── 日均 Token 虚线 ──
         avg_val = total_val / n
-        avg_y = by + bh - int(bh * avg_val / max_val)
+        avg_y = by + bh - min(int(bh * avg_val / max_val), bh)
         self.sidebar_cv.create_line(bx, avg_y, bx + bw, avg_y, fill=BLUE, width=1, dash=(3, 3))
         self.sidebar_cv.create_text(bx + bw, avg_y - 2, text=f"avg {avg_val:,.0f}",
                                     font=("Courier New", 6), fill=BLUE, anchor="se")
@@ -1409,7 +1411,7 @@ class Widget:
         # ── 绘制每个柱子（统一蓝，无高亮） ──
         for i, day in enumerate(series):
             x = bx + i * (bar_w + gap)
-            h = max(2, int(bh * day["total"] / max_val))
+            h = max(2, min(int(bh * day["total"] / max_val), bh))
             y = by + bh - h
             is_today = day["date"] == today_str
             tag = f"bar_token_{i}"
@@ -1464,12 +1466,16 @@ class Widget:
             self.sidebar_cv.create_rectangle(x, y0 + 22, x + 3, y0 + 23, fill=B2, outline="")
 
         # ── 柱子 & 均线参数 ──
-        max_val = max(d["cost"] for d in series) or 1
+        actual_max = max(d["cost"] for d in series) or 1
+        chart_max_cfg = load_config().get("chart_max_display", {}).get("cost")
+        if chart_max_cfg and chart_max_cfg > 0:
+            chart_max_cfg = self._conv(chart_max_cfg)  # CNY → 当前币种
+        max_val = chart_max_cfg if (chart_max_cfg and chart_max_cfg > 0) else actual_max
         n = len(series)
 
         # ── 均价虚线 ──
         avg_val = total_val / n
-        avg_y = by + bh - int(bh * avg_val / max_val)
+        avg_y = by + bh - min(int(bh * avg_val / max_val), bh)
         self.sidebar_cv.create_line(bx, avg_y, bx + bw, avg_y, fill=PGCA, width=1, dash=(3, 3))
         avg_label = f"avg {self._fmt_curr(avg_val, 4)}"
         self.sidebar_cv.create_text(bx + bw, avg_y - 2, text=avg_label,
@@ -1488,7 +1494,7 @@ class Widget:
 
         for i, day in enumerate(series):
             x = bx + i * (bar_w + gap)
-            h = max(2, int(bh * day["cost"] / max_val))
+            h = max(2, min(int(bh * day["cost"] / max_val), bh))
             y = by + bh - h
             is_today = day["date"] == today_str
             tag = f"bar_cost_{i}"

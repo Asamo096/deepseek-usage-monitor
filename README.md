@@ -10,6 +10,7 @@
 - **每日 Token 统计** — 总计、输入、输出 token 及迷你条形图
 - **缓存命中率** — 醒目显示及颜色阈值（>80% 绿色、>50% 蓝色、<50% 橙色）
 - **费用追踪** — 今日花费与月度花费（¥，精确到 4 位小数）
+- **柱状图上限可调** — 在 `config.json` 中设置 Token/Cost 柱状图最大显示值，超出部分自动截断，方便对比差距悬殊的数据（Cost 值以人民币为单位，切换币种自动换算）
 - **赠额显示** — 单独展示免费额度
 - **可配置刷新** — 在 `config.json` 中设置刷新间隔（默认 10 秒，最少 3 秒）
 - **悬停虚化** — 鼠标悬停时淡出至 25% 透明度，移开恢复（可在系统托盘切换）
@@ -59,6 +60,22 @@ JSON.parse(localStorage.getItem('userToken')).value
 | `bearer_token` | string | — | 平台认证令牌 |
 | `refresh_interval` | integer | 10 | 自动刷新间隔（秒，最少 3 秒） |
 | `hover_fade` | boolean | true | 鼠标悬停时虚化 |
+| `chart_max_display` | object | — | 柱状图最大显示值，详见下方说明 |
+
+`chart_max_display` 格式示例：
+
+```json
+"chart_max_display": {
+  "token": 5000000,
+  "cost": 5
+}
+```
+
+- `token` — Token 柱状图最大显示值（单位：tokens），超过此值的柱子以最高高度显示
+- `cost` — 费用柱状图最大显示值（单位：**人民币**），超过此值的柱子以最高高度显示；切换为其他币种（USD/CAD/JPY）时自动按汇率换算
+- 不设置或设为 `null` 时自动根据数据最大值适配（原行为）
+
+> 注意：此设置仅影响柱状图的**视觉显示高度**，不改变数据的实际数值和准确性。鼠标悬停时 tooltip 内仍显示真实值。
 
 ## 操作方式
 
@@ -107,6 +124,7 @@ A retro pixel-art desktop widget for monitoring your **DeepSeek API** usage in r
 - **Daily Token Stats** — total, prompt, and completion tokens with mini bars
 - **Cache Hit Rate** — prominent display with color thresholds (>80% green, >50% blue, <50% orange)
 - **Cost Tracking** — today's cost & monthly cost (¥, 4 decimal places)
+- **Adjustable Chart Caps** — configure max bar chart values via `config.json`; caps visual height without altering data, auto-converts cost cap on currency switch
 - **Bonus Balance** — shows free grant balance separately
 - **Configurable Refresh** — set refresh interval in `config.json` (default: 10s, minimum 3s)
 - **Hover Fade** — fades to 25% opacity on hover, snaps back on leave (toggle from system tray)
@@ -156,6 +174,22 @@ On first launch, a dialog prompts you to paste the token. It is saved in `config
 | `bearer_token` | string | — | Auth token from platform.deepseek.com |
 | `refresh_interval` | integer | 10 | Auto-refresh interval in seconds (min 3) |
 | `hover_fade` | boolean | true | Fade widget on mouse hover |
+| `chart_max_display` | object | — | Bar chart max display value (see below) |
+
+`chart_max_display` example:
+
+```json
+"chart_max_display": {
+  "token": 5000000,
+  "cost": 5
+}
+```
+
+- `token` — Max display value for the token bar chart (unit: tokens). Bars exceeding this value will be capped at full height.
+- `cost` — Max display value for the cost bar chart (unit: **CNY**). Bars exceeding this value will be capped at full height. Auto-converts when switching to other currencies (USD/CAD/JPY).
+- Omit or set to `null` to auto-scale (original behavior).
+
+> Note: This affects **visual bar height only** — actual data values remain unchanged. Hover tooltips still show real values.
 
 ## Controls
 

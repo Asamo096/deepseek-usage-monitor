@@ -106,3 +106,15 @@ def get_auto_snap() -> bool:
     """Return whether auto-snap-to-edge is enabled (default false)."""
     cfg = load_config()
     return bool(cfg.get("auto_snap", False))
+
+
+def get_chart_max_display() -> dict:
+    """Return chart max display settings with 'token' and 'cost' keys, or empty dict.
+
+    When set, bar charts will cap visual bar height at this value (data unaffected).
+    Example config.json entry:
+        "chart_max_display": {"token": 5000000, "cost": 5}
+    """
+    cfg = load_config()
+    val = cfg.get("chart_max_display", {})
+    return val if isinstance(val, dict) else {}
