@@ -1,5 +1,3 @@
-[中文](#deepseek-api-用量监控) | [English](#deepseek-monitor)
-------
 # DeepSeek API 用量监控
 
 一个复古像素风桌面小组件，实时监控你的 DeepSeek API 用量。数据来自 [platform.deepseek.com](https://platform.deepseek.com/usage) 内部接口。
@@ -17,8 +15,10 @@
 - **系统托盘** — 最小化到托盘，支持显示/隐藏、虚化开关、刷新和退出
 - **置顶显示** — 始终位于所有窗口之上
 - **拖拽移动** — 左键按住任意位置拖拽
-- **滚动语录** — 底部轮播 60+ 条 AI笑话
+- **滚动语录** — 底部轮播 60+ 条 AI 笑话
 - **像素风界面** — 深色主题、Courier New 等宽字体、高对比度布局
+- **通知栏显示** — 数据更新时通过系统通知栏提醒（可开关）
+- **充值入口** — 右键菜单快速跳转充值页面
 
 ## 快速开始
 
@@ -36,7 +36,7 @@ pip install pystray pillow
 
 ### 2. 获取 Token
 
-1. 使用**Chrome**浏览器打开 [platform.deepseek.com](https://platform.deepseek.com/usage) 并登录
+1. 使用 **Chrome** 浏览器打开 [platform.deepseek.com](https://platform.deepseek.com/usage) 并登录
 2. 按 **F12** → **控制台**，粘贴以下代码：
 
 ```js
@@ -61,6 +61,7 @@ JSON.parse(localStorage.getItem('userToken')).value
 | `refresh_interval` | integer | 10 | 自动刷新间隔（秒，最少 3 秒） |
 | `hover_fade` | boolean | true | 鼠标悬停时虚化 |
 | `chart_max_display` | object | — | 柱状图最大显示值，详见下方说明 |
+| `notify_on_update` | boolean | false | 数据更新时通知栏显示 |
 
 `chart_max_display` 格式示例：
 
@@ -82,22 +83,24 @@ JSON.parse(localStorage.getItem('userToken')).value
 | 操作 | 效果 |
 |------|------|
 | 左键拖拽 | 移动窗口 |
-| 右键 | 右键菜单（刷新 / 退出） |
+| 右键 | 右键菜单（刷新 / 图表 / 热力图 / 模式切换 / 充值 / 退出等） |
 | 托盘左键 | 切换显示/隐藏 |
-| 托盘右键 | 右键菜单（含虚化开关） |
+| 托盘右键 | 右键菜单 |
 | 鼠标悬停 | 淡出至 25% 透明度 |
 
 ## 项目结构
 
 ```
-deepseek-widget/
+deepseek-usage-monitor/
 ├── main.pyw             # 入口 + 系统托盘
 ├── widget.py            # 像素风界面
 ├── api.py               # 内部 API 客户端
 ├── config.py            # 配置管理器
 ├── token_extractor.py   # 可选的 Chrome 自动提取
+├── heatmap.py           # 热力图数据管理
 ├── config.json          # Token 与设置（已加入 gitignore）
 ├── requirements.txt     # Python 依赖
+├── LICENSE              # CC BY-NC 4.0 许可证
 ├── README.md
 └── .gitignore
 ```
@@ -110,120 +113,14 @@ deepseek-widget/
 
 ## 许可证
 
-[CC BY-NC 4.0](LICENSE) — 署名-非商业使用 4.0 国际
+本项目采用 [CC BY-NC 4.0](LICENSE)（署名-非商业性使用 4.0 国际许可协议）。
 
-------
+你可以自由地：
+- **共享** — 在任何媒介以任何形式复制、发行本作品
+- **演绎** — 修改、转换或以本作品为基础进行创作
 
-# DeepSeek Monitor
+惟须遵守下列条件：
+- **署名** — 你必须给出适当的署名。
+- **非商业性使用** — 你不得将本作品用于商业目的。
 
-A retro pixel-art desktop widget for monitoring your **DeepSeek API** usage in real time. Data sourced from [platform.deepseek.com](https://platform.deepseek.com/usage) internal APIs.
-
-## Features
-
-- **Balance Dashboard** — remaining balance with color-coded progress bar (<15% red, <40% amber, >40% blue)
-- **Daily Token Stats** — total, prompt, and completion tokens with mini bars
-- **Cache Hit Rate** — prominent display with color thresholds (>80% green, >50% blue, <50% orange)
-- **Cost Tracking** — today's cost & monthly cost (¥, 4 decimal places)
-- **Adjustable Chart Caps** — configure max bar chart values via `config.json`; caps visual height without altering data, auto-converts cost cap on currency switch
-- **Bonus Balance** — shows free grant balance separately
-- **Configurable Refresh** — set refresh interval in `config.json` (default: 10s, minimum 3s)
-- **Hover Fade** — fades to 25% opacity on hover, snaps back on leave (toggle from system tray)
-- **System Tray** — minimize to tray with show/hide, hover-fade toggle, refresh, and exit
-- **Always on Top** — pinned above all windows
-- **Drag to Move** — left-click and drag anywhere
-- **Rotating Quotes** — 60+ AI memes
-- **Pixel-Art Aesthetic** — dark theme, Courier New monospace, high-contrast layout
-
-## Quick Start
-
-### 1. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-For system tray support (recommended):
-
-```bash
-pip install pystray pillow
-```
-
-### 2. Get Your Token
-
-1. Open [platform.deepseek.com](https://platform.deepseek.com/usage) with **Chrome** and log in
-2. Press **F12** → **Console**, then paste:
-
-```js
-JSON.parse(localStorage.getItem('userToken')).value
-```
-
-3. Copy the output string
-
-### 3. Run
-
-```bash
-click main.pyw
-```
-
-On first launch, a dialog prompts you to paste the token. It is saved in `config.json` afterward.
-
-## Configuration (`config.json`)
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `bearer_token` | string | — | Auth token from platform.deepseek.com |
-| `refresh_interval` | integer | 10 | Auto-refresh interval in seconds (min 3) |
-| `hover_fade` | boolean | true | Fade widget on mouse hover |
-| `chart_max_display` | object | — | Bar chart max display value (see below) |
-
-`chart_max_display` example:
-
-```json
-"chart_max_display": {
-  "token": 5000000,
-  "cost": 5
-}
-```
-
-- `token` — Max display value for the token bar chart (unit: tokens). Bars exceeding this value will be capped at full height.
-- `cost` — Max display value for the cost bar chart (unit: **CNY**). Bars exceeding this value will be capped at full height. Auto-converts when switching to other currencies (USD/CAD/JPY).
-- Omit or set to `null` to auto-scale (original behavior).
-
-> Note: This affects **visual bar height only** — actual data values remain unchanged. Hover tooltips still show real values.
-
-## Controls
-
-| Action | Effect |
-|--------|--------|
-| Left-click + drag | Move window |
-| Right-click | Context menu (Refresh / Exit) |
-| System tray (left-click) | Toggle show/hide |
-| System tray (right-click) | Context menu with hover-fade toggle |
-| Mouse hover | Fade to 25% opacity |
-
-## Project Structure
-
-```
-deepseek-widget/
-├── main.pyw             # Entry point + system tray
-├── widget.py            # Pixel-art GUI widget
-├── api.py               # platform.deepseek.com internal API client
-├── config.py            # Configuration manager
-├── token_extractor.py   # Optional Chrome localStorage extraction
-├── config.json          # Bearer token & settings (gitignored)
-├── requirements.txt     # Python dependencies
-├── README.md
-└── .gitignore
-```
-
-## Notes
-
-- The token stays valid for days to weeks. If data stops updating, delete `config.json` and re-run.
-- The internal API is not officially documented and may break if platform.deepseek.com changes.
-- Token auto-extraction via Playwright is optional: `pip install playwright && playwright install chromium`
-
-## License
-
-[CC BY-NC 4.0](LICENSE) — Attribution-NonCommercial 4.0 International
-
------
+完整许可证文本：https://creativecommons.org/licenses/by-nc/4.0/legalcode
