@@ -108,6 +108,12 @@ def get_auto_snap() -> bool:
     return bool(cfg.get("auto_snap", False))
 
 
+def get_notify_on_update() -> bool:
+    """Return whether to show notification on data update (default false)."""
+    cfg = load_config()
+    return bool(cfg.get("notify_on_update", False))
+
+
 def get_chart_max_display() -> dict:
     """Return chart max display settings with 'token' and 'cost' keys, or empty dict.
 

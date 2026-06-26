@@ -7,8 +7,10 @@ from itertools import cycle
 import threading
 
 from api import DeepSeekPlatform
-from config import get_refresh_interval, get_pin_window, get_currency, get_lite_mode, get_theme, get_auto_snap, load_config, save_config
+from config import get_refresh_interval, get_pin_window, get_currency, get_lite_mode, get_theme, get_auto_snap, get_notify_on_update, load_config, save_config
 from heatmap import load_heatmap, save_heatmap, build_heatmap_from_api, merge_today
+
+RECHARGE_URL = "https://platform.deepseek.com/top_up"
 
 # ── Colors ─────────────────────────────────────────────────────────────────
 # Module-level color names — updated by apply_theme() at runtime.
@@ -274,9 +276,10 @@ class Widget:
         self._animating = False
         self._lite_mode = get_lite_mode()
         self._theme = get_theme()
+        self._notify_on_update = get_notify_on_update()
 
         self.root = tk.Tk()
-        self.root.title("Tokens Monitor")
+        self.root.title("Token 监控")
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", self._pin_window, "-alpha", 0.0)
         self.root.configure(bg=BG)
@@ -558,7 +561,7 @@ class Widget:
         cv.create_rectangle(6, 6, W-6, H-6, outline=B2, width=1)
 
         # ── Title ──
-        cv.create_text(14, 22, text="TOKENS MONITOR",
+        cv.create_text(14, 22, text="Token 监控",
                        font=self.f1, fill=W0, anchor="w")
         if self._theme == "Midnight Glow":
             x0 = 14 + self.f1.measure("TOKENS ")
@@ -570,7 +573,7 @@ class Widget:
 
         # ── Balance card (46-150) ──
         cv.create_rectangle(10, 46, W-10, 150, fill=CARD, outline=BC, width=1)
-        cv.create_text(18, 54, text="BALANCE", font=self.f3, fill=W2, anchor="w")
+        cv.create_text(18, 54, text="余额", font=self.f3, fill=W2, anchor="w")
         # subtitle: wallet / free / used
         cv.create_text(18, 76, text="", font=self.f3,
                        fill=W1, anchor="w", tags="bal_sub")
@@ -578,7 +581,7 @@ class Widget:
         cv.create_text(18, 102, text="", font=self.f5,
                        fill=W0, anchor="w", tags="bal_amt")
         # remaining label above progress bar
-        cv.create_text(18, 130, text="REMAINING", font=self.f3,
+        cv.create_text(18, 130, text="剩余", font=self.f3,
                        fill=B1, anchor="w", tags="pul")
         # progress bar
         cv.create_rectangle(18, 138, W-18, 150, fill=PGB, outline=BC, width=1, tags="pbg")
@@ -587,14 +590,14 @@ class Widget:
 
         # ── Today card (152-280) ──
         cv.create_rectangle(10, 152, W-10, 280, fill=CARD, outline=BC, width=1)
-        cv.create_text(18, 160, text="TODAY", font=self.f3, fill=W2, anchor="w")
+        cv.create_text(18, 160, text="今日", font=self.f3, fill=W2, anchor="w")
 
         # TOKENS row
-        cv.create_text(18, 180, text="TOKENS", font=self.f3, fill=W1, anchor="w")
+        cv.create_text(18, 180, text="Token", font=self.f3, fill=W1, anchor="w")
         cv.create_text(90, 180, text="", font=self.f2, fill=W0, anchor="w", tags="tt")
 
         # INPUT row + mini bar
-        cv.create_text(18, 212, text="INPUT", font=self.f3, fill=W1, anchor="w")
+        cv.create_text(18, 212, text="输入", font=self.f3, fill=W1, anchor="w")
         cv.create_text(85, 212, text="", font=self.f2, fill=W0, anchor="w", tags="tp")
         cv.create_rectangle(224, 206, W-18, 218, fill=MB, outline="", tags="ibg")
         cv.create_rectangle(224, 206, 224, 218, fill=BLUE, outline="", tags="ifl")
@@ -602,7 +605,7 @@ class Widget:
                        fill=B1, anchor="w", tags="ipct")
 
         # OUTPUT row + mini bar
-        cv.create_text(18, 236, text="OUTPUT", font=self.f3, fill=W1, anchor="w")
+        cv.create_text(18, 236, text="输出", font=self.f3, fill=W1, anchor="w")
         cv.create_text(85, 236, text="", font=self.f2, fill=W0, anchor="w", tags="tc")
         cv.create_rectangle(224, 230, W-18, 242, fill=MB, outline="", tags="obg")
         cv.create_rectangle(224, 230, 224, 242, fill=PURPLE, outline="", tags="ofl")
@@ -611,7 +614,7 @@ class Widget:
 
         # CACHE row (prominent, with separator)
         cv.create_rectangle(18, 252, W-18, 254, fill=BC, outline="")
-        cv.create_text(18, 266, text="CACHE", font=self.f3, fill=W1, anchor="w")
+        cv.create_text(18, 266, text="缓存", font=self.f3, fill=W1, anchor="w")
         cv.create_text(75, 266, text="", font=self.f2, fill=GREEN, anchor="w", tags="cr")
         # cache full-width mini bar
         cv.create_rectangle(170, 260, W-18, 272, fill=MB, outline=BC, width=1, tags="cbg")
@@ -636,7 +639,7 @@ class Widget:
         w, h = W_LITE, H_LITE
 
         # ── Title ──
-        cv.create_text(12, 16, text="TOKENS MONITOR", font=self.f2, fill=W0, anchor="w")
+        cv.create_text(12, 16, text="Token 监控", font=self.f2, fill=W0, anchor="w")
         if self._theme == "Midnight Glow":
             x0 = 12 + self.f2.measure("TOKENS ")
             rw = self.f2.measure("MONITOR")
@@ -648,20 +651,20 @@ class Widget:
 
         # ── Balance card ──
         cv.create_rectangle(8, 34, w-8, 106, fill=CARD, outline=BC, width=1)
-        cv.create_text(14, 38, text="BALANCE", font=self.f3, fill=W2, anchor="w")
+        cv.create_text(14, 38, text="余额", font=self.f3, fill=W2, anchor="w")
         cv.create_text(w//2, 68, text="", font=self.f5, fill=W0, anchor="center", tags="bal_amt")
         cv.create_text(14, 88, text="", font=self.f3, fill=W1, anchor="w", tags="bal_sub")
         cv.create_rectangle(14, 96, w-14, 104, fill=PGB, outline=BC, width=1, tags="pbg")
 
         # ── Today card ──
         cv.create_rectangle(8, 112, w-8, 168, fill=CARD, outline=BC, width=1)
-        cv.create_text(14, 116, text="TODAY", font=self.f3, fill=W2, anchor="w")
+        cv.create_text(14, 116, text="今日", font=self.f3, fill=W2, anchor="w")
         cv.create_text(14, 140, text="", font=self.f3, fill=W0, anchor="w", tags="tt_lite")
         cv.create_text(w-14, 140, text="", font=self.f2, fill=BLUE, anchor="e", tags="ftc")
         cv.create_text(14, 158, text="", font=self.f3, fill=GREEN, anchor="w", tags="cr_lite")
 
         # ── Month line ──
-        cv.create_text(14, 178, text="MONTH", font=self.f3, fill=W2, anchor="w")
+        cv.create_text(14, 178, text="本月", font=self.f3, fill=W2, anchor="w")
         cv.create_text(14, 196, text="", font=self.f3, fill=W1, anchor="w", tags="fm_lite")
 
         # ── Footer ──
@@ -676,8 +679,8 @@ class Widget:
         y0 = 2
         cv.create_rectangle(8, y0, W_LITE - 8, y0 + hm_h, fill=CARD, outline=BC, width=1, tags="lhm_item")
         cv.create_rectangle(10, y0 + 2, W_LITE - 10, y0 + hm_h - 2, outline=B2, width=1, tags="lhm_item")
-        cv.create_text(14, y0 + 6, text="◆ HEATMAP", font=self.f2, fill=GREEN, anchor="w", tags="lhm_item")
-        cv.create_text(W_LITE - 14, y0 + 6, text="(token × day)", font=self.f3, fill=B2, anchor="e", tags="lhm_item")
+        cv.create_text(14, y0 + 6, text="◆ 热力图", font=self.f2, fill=GREEN, anchor="w", tags="lhm_item")
+        cv.create_text(W_LITE - 14, y0 + 6, text="(token × 天)", font=self.f3, fill=B2, anchor="e", tags="lhm_item")
         for x in range(10, W_LITE - 10, 6):
             cv.create_rectangle(x, y0 + 17, x + 3, y0 + 18, fill=B2, outline="", tags="lhm_item")
 
@@ -751,6 +754,10 @@ class Widget:
         self._updating = False
         if not self._startup_done:
             self._startup_fade_in()
+        if self._notify_on_update and data and data.get("ok", True):
+            bal = data.get("balance", 0)
+            today = data.get("today_total", 0)
+            self._show_notification("Token 监控", f"余额: {self._fmt_curr(bal)}  |  今日: {today:,} Token")
 
     def _on_fetch_error(self, msg):
         if self._data is None:
@@ -781,7 +788,7 @@ class Widget:
             if cv.find_withtag("bal_amt"):
                 cv.itemconfig("bal_amt", text="ERR", fill=RED)
             if cv.find_withtag("ft"):
-                cv.itemconfig("ft", text="~ error ~")
+                cv.itemconfig("ft", text="~ 错误 ~")
             return
 
         if cv.find_withtag("dot"):
@@ -814,7 +821,7 @@ class Widget:
 
         bonus = float(d.get("bonus_balance", 0) or 0)
         cv.itemconfig("bal_sub",
-                      text=f"Wallet {self._fmt_curr(bal)}  |  Free {self._fmt_curr(bonus)}  |  Used {int((1-pct)*100)}%")
+                       text=f"钱包 {self._fmt_curr(bal)}  |  免费 {self._fmt_curr(bonus)}  |  已用 {int((1-pct)*100)}%")
 
         # progress bar fill
         pw = int(340 * pct)
@@ -872,8 +879,8 @@ class Widget:
         # ── Footer ──
         mt = d.get("monthly_tokens", 0)
         cv.itemconfig("fm",
-                      text=f"MONTH  {mt:,} tkns  {self._fmt_curr(d.get('monthly_cost',0), 4)}")
-        cv.itemconfig("fs", text=f"LEFT {int(pct*100)}%")
+                       text=f"本月  {mt:,} Token  {self._fmt_curr(d.get('monthly_cost',0), 4)}")
+        cv.itemconfig("fs", text=f"剩余 {int(pct*100)}%")
         cv.itemconfig("fq", text=self._quote)
         cv.itemconfig("ft", text=f"~ {datetime.now().strftime('%H:%M:%S')} ~")
 
@@ -892,7 +899,7 @@ class Widget:
         cv.itemconfig("bal_amt", text=self._fmt_curr(bal))
         bonus = float(d.get("bonus_balance", 0) or 0)
         cv.itemconfig("bal_sub",
-                      text=f"Wallet {self._fmt_curr(bal)}  |  Free {self._fmt_curr(bonus)}  |  Used {int((1-pct)*100)}%")
+                       text=f"钱包 {self._fmt_curr(bal)}  |  免费 {self._fmt_curr(bonus)}  |  已用 {int((1-pct)*100)}%")
         # progress bar
         pw = int((w - 28) * pct)
         if pw > 0:
@@ -905,19 +912,19 @@ class Widget:
 
         # ── Today card ──
         ttl = d.get("today_total", 0)
-        cv.itemconfig("tt_lite", text=f"TOKENS  {ttl:,}")
+        cv.itemconfig("tt_lite", text=f"Token  {ttl:,}")
         cv.itemconfig("ftc", text=self._fmt_curr(d.get("today_cost", 0), 4))
         # cache hit rate
         ch = d.get("today_cache_hit", 0)
         cm = d.get("today_cache_miss", 0)
         ct = ch + cm
         crate = (ch / ct * 100) if ct else 0
-        cv.itemconfig("cr_lite", text=f"CACHE  {crate:.1f}%  {ch:,}/{ct:,}" if ct else "")
+        cv.itemconfig("cr_lite", text=f"缓存  {crate:.1f}%  {ch:,}/{ct:,}" if ct else "")
 
         # ── Month line ──
         mt = d.get("monthly_tokens", 0)
         cv.itemconfig("fm_lite",
-                      text=f"{mt:,} tkns  {self._fmt_curr(d.get('monthly_cost',0), 4)}")
+                      text=f"{mt:,} Token  {self._fmt_curr(d.get('monthly_cost',0), 4)}")
 
         # ── Footer ──
         cv.itemconfig("ft", text=f"~ {datetime.now().strftime('%H:%M:%S')} ~")
@@ -1306,6 +1313,31 @@ class Widget:
     def get_auto_snap(self) -> bool:
         return self._auto_snap
 
+    def toggle_notify_on_update(self) -> bool:
+        """Toggle notification on update."""
+        self._notify_on_update = not self._notify_on_update
+        try:
+            cfg = load_config()
+            cfg["notify_on_update"] = self._notify_on_update
+            save_config(cfg)
+        except Exception:
+            pass
+        return self._notify_on_update
+
+    def _show_notification(self, title: str, message: str):
+        """Show a notification via the tray icon if available."""
+        tray = getattr(self, '_tray_icon', None)
+        if tray is not None:
+            try:
+                tray.notify(message, title)
+            except Exception:
+                pass
+
+    def _show_recharge_qr(self):
+        """Open the recharge page in browser."""
+        import webbrowser
+        webbrowser.open(RECHARGE_URL)
+
     def _tick(self):
         self.update_data()
         self.root.after(self._interval, self._tick)
@@ -1380,28 +1412,34 @@ class Widget:
                 self.root.after(0, fn, *a)
             return _cmd
 
-        m.add_command(label="🔍 Refresh Now", command=_pick(self.update_data))
+        m.add_command(label="🔍 立即刷新", command=_pick(self.update_data))
         m.add_separator()
         if self._lite_mode:
-            chart_label = "✕ Close Charts" if self._lite_chart else "📊 Charts"
+            chart_label = "✕ 关闭图表" if self._lite_chart else "📊 图表"
         else:
-            chart_label = "✕ Close Charts" if self._sidebar_visible else "📊 Charts"
+            chart_label = "✕ 关闭图表" if self._sidebar_visible else "📊 图表"
         m.add_command(label=chart_label, command=_pick(self.toggle_sidebar))
         if self._lite_mode:
-            hm_label = "✕ Close Heatmap" if self._lite_heatmap else "♨ Heatmap"
+            hm_label = "✕ 关闭热力图" if self._lite_heatmap else "♨ 热力图"
         else:
-            hm_label = "✕ Close Heatmap" if self._heatmap_visible else "♨ Heatmap"
+            hm_label = "✕ 关闭热力图" if self._heatmap_visible else "♨ 热力图"
         m.add_command(label=hm_label, command=_pick(self.toggle_heatmap))
         m.add_command(
-            label="🔰 Full Mode" if self._lite_mode else "🔰 Lite Mode",
+            label="🔰 完整模式" if self._lite_mode else "🔰 精简模式",
             command=_pick(self.toggle_lite_mode)
         )
         m.add_separator()
 
-        pin_label = "📌 Unpin Window" if self._pin_window else "📌 Pin Window"
+        pin_label = "📌 取消固定窗口" if self._pin_window else "📌 固定窗口"
         m.add_command(label=pin_label, command=_pick(self.toggle_pin))
-        snap_label = "🧲 Unsnap (Beta)" if self._auto_snap else "🧲 Auto Snap (Beta)"
+        snap_label = "🧲 取消吸附" if self._auto_snap else "🧲 自动吸附"
         m.add_command(label=snap_label, command=_pick(self.toggle_auto_snap))
+        notify_label = "🔔 关闭通知栏显示" if self._notify_on_update else "🔔 收到通知栏显示"
+        m.add_command(label=notify_label, command=_pick(self.toggle_notify_on_update))
+        m.add_separator()
+
+        # Recharge
+        m.add_command(label="💰 充值", command=_pick(self._show_recharge_qr))
         m.add_separator()
 
         # Currency submenu
@@ -1412,7 +1450,7 @@ class Widget:
                 label=f"{'✓ ' if self._currency == code else '   '}{label}",
                 command=_pick(self.set_currency, code),
             )
-        m.add_cascade(label="💱 Currency", menu=curr_menu)
+        m.add_cascade(label="💱 货币", menu=curr_menu)
         m.add_separator()
 
         # Theme submenu
@@ -1423,11 +1461,11 @@ class Widget:
                 label=f"{'✓ ' if self._theme == t_name else '   '}{t_name}",
                 command=_pick(self.apply_theme, t_name),
             )
-        m.add_cascade(label="🎨 Theme", menu=theme_menu)
+        m.add_cascade(label="🎨 主题", menu=theme_menu)
         m.add_separator()
 
-        m.add_command(label="🔄 Restart", command=_pick(self._restart))
-        m.add_command(label="✕ Exit", command=_pick(self._ex))
+        m.add_command(label="🔄 重启", command=_pick(self._restart))
+        m.add_command(label="✕ 退出", command=_pick(self._ex))
         m.tk_popup(self.root.winfo_pointerx(), self.root.winfo_pointery())
 
     def _ex(self):
@@ -1685,7 +1723,7 @@ class Widget:
         series = d.get("daily_series", [])
         if not series:
             self.sidebar_cv.create_text(w // 2, sb_h // 2,
-                                        text="No data yet", font=self.f3, fill=B1, anchor="center")
+                                        text="暂无数据", font=self.f3, fill=B1, anchor="center")
             return
 
         # 边框使用实际侧边栏高度
@@ -1693,7 +1731,7 @@ class Widget:
         self.sidebar_cv.create_rectangle(6, 6, w - 6, sb_h - 6, outline=B2, width=1)
 
         # ── 顶栏标题 ──
-        self.sidebar_cv.create_text(w // 2, 16, text="◈ MONTHLY TRENDS ◈",
+        self.sidebar_cv.create_text(w // 2, 16, text="◈ 月度趋势 ◈",
                                     font=self.f2, fill=BLUE, anchor="center")
         self.sidebar_cv.create_line(10, 26, w - 10, 26, fill=BC, width=1)
 
@@ -1726,7 +1764,7 @@ class Widget:
 
         # ── 标题栏 ──
         cv.create_text(pad + 5, y0 + 5, text="◆", font=self.f3, fill=BLUE, anchor="w")
-        cv.create_text(pad + 17, y0 + 5, text="TOKEN", font=self.f2, fill=BLUE, anchor="w")
+        cv.create_text(pad + 17, y0 + 5, text="Token", font=self.f2, fill=BLUE, anchor="w")
         total_val = sum(d["total"] for d in series)
         cv.create_text(pad + cw - 5, y0 + 5, text=f"{total_val:,}",
                        font=self.f2, fill=W0, anchor="e")
@@ -1750,7 +1788,7 @@ class Widget:
         avg_val = total_val / n
         avg_y = by + bh - min(int(bh * avg_val / max_val), bh)
         cv.create_line(bx, avg_y, bx + bw, avg_y, fill=BLUE, width=1, dash=(3, 3))
-        cv.create_text(bx + bw, avg_y - 2, text=f"avg {avg_val:,.0f}",
+        cv.create_text(bx + bw, avg_y - 2, text=f"平均 {avg_val:,.0f}",
                        font=("Courier New", 6), fill=BLUE, anchor="se")
 
         for i, day in enumerate(series):
@@ -1801,7 +1839,7 @@ class Widget:
                             fill=PGB, outline=BC, width=1)
 
         cv.create_text(pad + 5, y0 + 5, text="◈", font=self.f3, fill=PGCA, anchor="w")
-        cv.create_text(pad + 17, y0 + 5, text="COST", font=self.f2, fill=PGCA, anchor="w")
+        cv.create_text(pad + 17, y0 + 5, text="费用", font=self.f2, fill=PGCA, anchor="w")
         total_val = sum(d["cost"] for d in series)
         cv.create_text(pad + cw - 5, y0 + 5, text=self._fmt_curr(total_val, 4),
                        font=self.f2, fill=W0, anchor="e")
@@ -1816,7 +1854,7 @@ class Widget:
         avg_val = total_val / n
         avg_y = by + bh - min(int(bh * avg_val / max_val), bh)
         cv.create_line(bx, avg_y, bx + bw, avg_y, fill=PGCA, width=1, dash=(3, 3))
-        avg_label = f"avg {self._fmt_curr(avg_val, 4)}"
+        avg_label = f"平均 {self._fmt_curr(avg_val, 4)}"
         cv.create_text(bx + bw, avg_y - 2, text=avg_label,
                        font=("Courier New", 6), fill=PGCA, anchor="se")
 
@@ -1878,8 +1916,8 @@ class Widget:
         cv.create_rectangle(6, 6, hm_w - 6, hm_h - 6, outline=B2, width=1)
 
         # ── 标题栏 ──
-        cv.create_text(14, 12, text="◆ HEATMAP", font=self.f2, fill=GREEN, anchor="w")
-        cv.create_text(hm_w - 14, 12, text="(token × day)", font=self.f3, fill=B2, anchor="e")
+        cv.create_text(14, 12, text="◆ 热力图", font=self.f2, fill=GREEN, anchor="w")
+        cv.create_text(hm_w - 14, 12, text="(token × 天)", font=self.f3, fill=B2, anchor="e")
         for x in range(10, hm_w - 10, 6):
             cv.create_rectangle(x, 23, x + 3, 24, fill=B2, outline="")
 
@@ -1932,8 +1970,8 @@ class Widget:
         # ── Label ──
         ly = y0
         if show_label:
-            cv.create_text(x0, ly, text="HEATMAP", font=self.f3, fill=W2, anchor="w", tags=group_tag)
-            cv.create_text(x0 + 65, ly, text="(token × day)", font=self.f3, fill=B2, anchor="w", tags=group_tag)
+            cv.create_text(x0, ly, text="热力图", font=self.f3, fill=W2, anchor="w", tags=group_tag)
+            cv.create_text(x0 + 65, ly, text="(token × 天)", font=self.f3, fill=B2, anchor="w", tags=group_tag)
             ly += 18
         else:
             ly += 2

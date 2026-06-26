@@ -74,33 +74,33 @@ def _create_tray_icon(widget: Widget) -> pystray.Icon:
     icon = pystray.Icon(
         "deepseek-monitor",
         img,
-        "Tokens Monitor",
+        "Token 监控",
         pystray.Menu(
-            pystray.MenuItem("Show / Hide", _schedule(lambda: _toggle_window(widget))),
-            pystray.MenuItem("Refresh", _schedule(widget.update_data)),
+            pystray.MenuItem("显示 / 隐藏", _schedule(lambda: _toggle_window(widget))),
+            pystray.MenuItem("刷新", _schedule(widget.update_data)),
             pystray.MenuItem(
-                "Pin Window",
+                "固定窗口",
                 widget.toggle_pin,
                 checked=lambda item: widget.get_pin_window(),
             ),
             pystray.MenuItem(
-                "Auto Snap (Beta)",
+                "自动吸附 (测试版)",
                 widget.toggle_auto_snap,
                 checked=lambda item: widget.get_auto_snap(),
             ),
             pystray.MenuItem(
-                "Charts Panel",
+                "图表面板",
                 widget.toggle_sidebar,
                 checked=lambda item: widget.get_sidebar_visible(),
             ),
             pystray.MenuItem(
-                "Lite Mode",
+                "精简模式",
                 widget.toggle_lite_mode,
                 checked=lambda item: widget.get_lite_mode(),
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                "Currency",
+                "货币",
                 pystray.Menu(
                     pystray.MenuItem(
                         "CNY  ¥",
@@ -125,7 +125,7 @@ def _create_tray_icon(widget: Widget) -> pystray.Icon:
                 ),
             ),
             pystray.MenuItem(
-                "Theme",
+                "主题",
                 pystray.Menu(
                     pystray.MenuItem(
                         "Default",
@@ -160,8 +160,8 @@ def _create_tray_icon(widget: Widget) -> pystray.Icon:
                 ),
             ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Restart", lambda: widget.root.after(0, widget._restart)),
-            pystray.MenuItem("Exit", lambda: _do_exit(icon, widget)),
+            pystray.MenuItem("重启", lambda: widget.root.after(0, widget._restart)),
+            pystray.MenuItem("退出", lambda: _do_exit(icon, widget)),
         ),
     )
     icon.default_action = _schedule(lambda: _toggle_window(widget))
