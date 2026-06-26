@@ -1,5 +1,7 @@
 # DeepSeek API 用量监控
 
+> Forked from [Shiorangerin/deepseek-usage-monitor](https://github.com/Shiorangerin/deepseek-usage-monitor)
+
 一个复古像素风桌面小组件，实时监控你的 DeepSeek API 用量。数据来自 [platform.deepseek.com](https://platform.deepseek.com/usage) 内部接口。
 
 ## 功能
